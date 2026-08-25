@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj": {}
+    "c:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj": {}
   },
   "projects": {
-    "C:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj": {
+    "c:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj",
+        "projectUniqueName": "c:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj",
         "projectName": "VideoSelector",
-        "projectPath": "C:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj",
+        "projectPath": "c:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj",
         "packagesPath": "C:\\Users\\rodri\\.nuget\\packages\\",
-        "outputPath": "C:\\_GitHubProjects\\SelecionarFotos\\obj\\",
+        "outputPath": "c:\\_GitHubProjects\\SelecionarFotos\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\rodri\\AppData\\Roaming\\NuGet\\NuGet.Config"

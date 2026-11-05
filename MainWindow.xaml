@@ -28,11 +28,66 @@
                 <TextBlock x:Name="TxtFileName" Text="No video" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="TxtVideoInfo" Text="" FontSize="12" Foreground="#aaa" HorizontalAlignment="Center" Margin="0,2,0,0"/>
             </StackPanel>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+                <Button x:Name="BtnCodecHelp" Content="ℹ️ Codecs iPhone (HEVC)" Click="BtnCodecHelp_Click" Height="30" Padding="10,0" Background="#333" Foreground="#ccc" BorderBrush="#555" ToolTip="Informações e instalação de codecs para vídeos de iPhone (HEVC/MOV)"/>
+            </StackPanel>
         </Grid>
 
         <!-- Media Player -->
         <Border Grid.Row="1" Background="Black" CornerRadius="5" ClipToBounds="True">
-            <MediaElement x:Name="MediaPlayer" LoadedBehavior="Manual" UnloadedBehavior="Stop" Stretch="Uniform"/>
+            <Grid>
+                <MediaElement x:Name="MediaPlayer" LoadedBehavior="Manual" UnloadedBehavior="Stop" Stretch="Uniform"/>
+                
+                <!-- Codec Warning / Help Overlay -->
+                <Border x:Name="CodecWarningOverlay" Background="#EA141414" Visibility="Collapsed" Padding="20">
+                    <Border Background="#252526" BorderBrush="#444448" BorderThickness="1" CornerRadius="8" 
+                            MaxWidth="580" VerticalAlignment="Center" HorizontalAlignment="Center" Padding="22">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
+                                <TextBlock Text="⚠️" FontSize="24" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Reprodução de Vídeo (iPhone / HEVC)" FontSize="17" FontWeight="Bold" Foreground="#F59E0B" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <TextBlock Text="Vídeos gravados em iPhones (.MOV) frequentemente utilizam a codificação HEVC (H.265). Para que o Windows consiga decodificá-los, é necessário ter o codec instalado no sistema."
+                                       TextWrapping="Wrap" FontSize="13" Foreground="#D4D4D8" LineHeight="18" Margin="0,0,0,12" TextAlignment="Center"/>
+
+                            <Border Background="#18181b" BorderBrush="#2e2e32" BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,0,0,14">
+                                <TextBlock x:Name="TxtCodecErrorDetails" Text="Status do vídeo..." FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                            </Border>
+
+                            <TextBlock Text="Opções para habilitar o codec:" FontWeight="SemiBold" FontSize="13" Foreground="White" Margin="0,0,0,8"/>
+
+                            <StackPanel Margin="0,0,0,12">
+                                <Button x:Name="BtnInstallCodecStore" Content="🛍️ Instalar Codec HEVC na Microsoft Store" Click="BtnInstallCodecStore_Click"
+                                        Height="36" Background="#0078D7" Foreground="White" BorderThickness="0" FontWeight="SemiBold" Margin="0,0,0,6" Cursor="Hand"/>
+                                
+                                <Button x:Name="BtnInstallCodecWinget" Content="⚡ Tentar Instalação Automática (via WinGet)" Click="BtnInstallCodecWinget_Click"
+                                        Height="32" Background="#333" Foreground="White" BorderBrush="#555" Margin="0,0,0,6" Cursor="Hand"/>
+
+                                <Button x:Name="BtnInstallCodecKLite" Content="🌐 Baixar Codec Gratuito (K-Lite Codec Pack)" Click="BtnInstallCodecKLite_Click"
+                                        Height="32" Background="#333" Foreground="White" BorderBrush="#555" Margin="0,0,0,6" Cursor="Hand"/>
+                            </StackPanel>
+
+                            <TextBlock x:Name="TxtCodecInstallStatus" Text="" Foreground="#10B981" FontSize="12" Margin="0,0,0,10" HorizontalAlignment="Center" TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                            <Grid Margin="0,5,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <Button x:Name="BtnCloseOverlay" Grid.Column="0" Content="✕ Fechar Aviso" Click="BtnCloseOverlay_Click" Height="30" Background="#333" Foreground="#bbb" BorderBrush="#555" HorizontalAlignment="Left" Width="110"/>
+                                
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button x:Name="BtnRetryVideo" Content="⟳ Tentar Novamente" Click="BtnRetryVideo_Click" Width="140" Height="30" Background="#333" Foreground="White" BorderBrush="#555" Margin="0,0,8,0"/>
+                                    <Button x:Name="BtnSkipVideo" Content="Próximo Vídeo ➔" Click="BtnNext_Click" Width="130" Height="30" Background="#0078D7" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Border>
+            </Grid>
         </Border>
 
         <!-- Bottom Controls -->

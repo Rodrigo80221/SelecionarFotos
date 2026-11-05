@@ -13,11 +13,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj",
+      "projectUniqueName": "C:\\_myApps\\SelecionarFotos\\VideoSelector.csproj",
       "projectName": "VideoSelector",
-      "projectPath": "C:\\_GitHubProjects\\SelecionarFotos\\VideoSelector.csproj",
+      "projectPath": "C:\\_myApps\\SelecionarFotos\\VideoSelector.csproj",
       "packagesPath": "C:\\Users\\rodri\\.nuget\\packages\\",
-      "outputPath": "C:\\_GitHubProjects\\SelecionarFotos\\obj\\",
+      "outputPath": "C:\\_myApps\\SelecionarFotos\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\rodri\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -45,7 +45,7 @@
         "auditLevel": "low",
         "auditMode": "all"
       },
-      "SdkAnalysisLevel": "10.0.300"
+      "SdkAnalysisLevel": "10.0.400"
     },
     "frameworks": {
       "net10.0-windows": {
@@ -70,7 +70,7 @@
             "privateAssets": "none"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.302/PortableRuntimeIdentifierGraph.json",
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.400/PortableRuntimeIdentifierGraph.json",
         "packagesToPrune": {
           "Microsoft.CSharp": "(,4.7.32767]",
           "Microsoft.VisualBasic": "(,10.4.32767]",

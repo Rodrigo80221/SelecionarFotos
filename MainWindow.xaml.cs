@@ -32,6 +32,7 @@ public partial class MainWindow : Window
             MediaPlayer.Play();
         };
         MediaPlayer.MediaOpened += MediaPlayer_MediaOpened;
+        MediaPlayer.MediaFailed += MediaPlayer_MediaFailed;
 
         _timer = new DispatcherTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(200);
@@ -50,6 +51,7 @@ public partial class MainWindow : Window
 
     private void MediaPlayer_MediaOpened(object sender, RoutedEventArgs e)
     {
+        CodecWarningOverlay.Visibility = Visibility.Collapsed;
         MediaPlayer.SpeedRatio = _currentSpeed;
         if (MediaPlayer.NaturalDuration.HasTimeSpan)
         {
@@ -58,8 +60,8 @@ public partial class MainWindow : Window
             int height = MediaPlayer.NaturalVideoHeight;
             
             string resString = $"{width}x{height}";
-            if (width >= 3840 || height >= 2160) resString += " (4K)";
-            else if (width >= 1920 || height >= 1080) resString += " (1080p)";
+            if ((width >= 3840 && height >= 2160) || (width >= 2160 && height >= 3840)) resString += " (4K)";
+            else if ((width >= 1920 && height >= 1080) || (width >= 1080 && height >= 1920)) resString += " (1080p)";
             
             TxtVideoInfo.Text = $"{duration:hh\\:mm\\:ss} | {resString}";
             TimelineSlider.Maximum = duration.TotalSeconds;
@@ -71,6 +73,23 @@ public partial class MainWindow : Window
             TimelineSlider.Maximum = 0;
             _timer.Stop();
         }
+    }
+
+    private void MediaPlayer_MediaFailed(object? sender, ExceptionRoutedEventArgs e)
+    {
+        _timer.Stop();
+        TimelineSlider.Maximum = 0;
+        TimelineSlider.Value = 0;
+        _isPlaying = false;
+        BtnPlayPause.Content = "Play";
+
+        string currentFile = (_currentIndex >= 0 && _currentIndex < _videoFiles.Count) ? _videoFiles[_currentIndex] : "";
+        string fileName = Path.GetFileName(currentFile);
+
+        TxtVideoInfo.Text = "Formato ou Codec não suportado";
+        TxtCodecErrorDetails.Text = $"Arquivo: {fileName}\nFalha: {e.ErrorException?.Message ?? "Não foi possível reproduzir este vídeo. Provável ausência de codec HEVC (H.265)."}\nCódigo: 0x{e.ErrorException?.HResult:X8}";
+        
+        CodecWarningOverlay.Visibility = Visibility.Visible;
     }
 
     private void SetSpeed(double speed, System.Windows.Controls.Button btn)
@@ -118,11 +137,21 @@ public partial class MainWindow : Window
         MediaPlayer.Position = TimeSpan.FromSeconds(TimelineSlider.Value);
     }
 
+    private static readonly HashSet<string> SupportedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4",
+        ".mov",
+        ".m4v",
+        ".avi",
+        ".wmv",
+        ".mkv"
+    };
+
     private void BtnSelectFolder_Click(object sender, RoutedEventArgs e)
     {
         using (var dialog = new FolderBrowserDialog())
         {
-            dialog.Description = "Select a folder containing MP4 videos";
+            dialog.Description = "Select a folder containing videos (MP4, MOV, etc.)";
             if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 LoadFolder(dialog.SelectedPath);
@@ -135,10 +164,13 @@ public partial class MainWindow : Window
         try
         {
             var directory = new DirectoryInfo(path);
-            var files = directory.GetFiles("*.mp4", SearchOption.TopDirectoryOnly);
+            var files = directory.EnumerateFiles("*.*", SearchOption.TopDirectoryOnly)
+                                 .Where(f => SupportedExtensions.Contains(f.Extension))
+                                 .OrderBy(f => f.CreationTime)
+                                 .Select(f => f.FullName)
+                                 .ToList();
             
-            // Sort by creation date
-            _videoFiles = files.OrderBy(f => f.CreationTime).Select(f => f.FullName).ToList();
+            _videoFiles = files;
             
             if (_videoFiles.Count > 0)
             {
@@ -162,6 +194,7 @@ public partial class MainWindow : Window
                 _undoStack.Clear();
                 BtnUndo.IsEnabled = false;
                 _currentIndex = -1;
+                CodecWarningOverlay.Visibility = Visibility.Collapsed;
             }
         }
         catch (System.Exception ex)
@@ -174,6 +207,8 @@ public partial class MainWindow : Window
     {
         if (_currentIndex >= 0 && _currentIndex < _videoFiles.Count)
         {
+            CodecWarningOverlay.Visibility = Visibility.Collapsed;
+            TxtCodecInstallStatus.Visibility = Visibility.Collapsed;
             string file = _videoFiles[_currentIndex];
             TxtFileName.Text = Path.GetFileName(file);
             TxtCounter.Text = $"[{_currentIndex + 1}/{_videoFiles.Count}]";
@@ -235,6 +270,7 @@ public partial class MainWindow : Window
             int rejectedIndex = _currentIndex;
             
             // Stop media player to release file lock
+            CodecWarningOverlay.Visibility = Visibility.Collapsed;
             _timer.Stop();
             TimelineSlider.Value = 0;
             MediaPlayer.Stop();
@@ -311,6 +347,7 @@ public partial class MainWindow : Window
         {
             var undoAction = _undoStack.Pop();
             
+            CodecWarningOverlay.Visibility = Visibility.Collapsed;
             _timer.Stop();
             TimelineSlider.Value = 0;
             MediaPlayer.Stop();
@@ -363,8 +400,135 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BtnCodecHelp_Click(object sender, RoutedEventArgs e)
+    {
+        if (CodecWarningOverlay.Visibility == Visibility.Visible)
+        {
+            CodecWarningOverlay.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            TxtCodecErrorDetails.Text = "Informativo: O Windows precisa do codec HEVC instalado para decodificar vídeos gravados no iPhone (.MOV / HEVC).";
+            TxtCodecInstallStatus.Visibility = Visibility.Collapsed;
+            CodecWarningOverlay.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e)
+    {
+        CodecWarningOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    private void BtnRetryVideo_Click(object sender, RoutedEventArgs e)
+    {
+        CodecWarningOverlay.Visibility = Visibility.Collapsed;
+        PlayCurrentVideo();
+    }
+
+    private void BtnInstallCodecStore_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "ms-windows-store://pdp/?ProductId=9n4wgh0z6vhq",
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://apps.microsoft.com/detail/9n4wgh0z6vhq",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Não foi possível abrir o link da loja: {ex.Message}", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+    }
+
+    private async void BtnInstallCodecWinget_Click(object sender, RoutedEventArgs e)
+    {
+        BtnInstallCodecWinget.IsEnabled = false;
+        BtnInstallCodecWinget.Content = "⏳ Instalando via WinGet...";
+        TxtCodecInstallStatus.Text = "Executando: winget install Microsoft.HEVCVideoExtension...";
+        TxtCodecInstallStatus.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(245, 158, 11));
+        TxtCodecInstallStatus.Visibility = Visibility.Visible;
+
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "winget",
+                Arguments = "install --id Microsoft.HEVCVideoExtension -e --accept-source-agreements --accept-package-agreements",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            var process = System.Diagnostics.Process.Start(psi);
+            if (process != null)
+            {
+                await process.WaitForExitAsync();
+                if (process.ExitCode == 0)
+                {
+                    TxtCodecInstallStatus.Text = "Codec instalado com sucesso! Recarregando vídeo...";
+                    TxtCodecInstallStatus.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                    await Task.Delay(1500);
+                    CodecWarningOverlay.Visibility = Visibility.Collapsed;
+                    PlayCurrentVideo();
+                    return;
+                }
+                else
+                {
+                    TxtCodecInstallStatus.Text = $"WinGet encerrou com código {process.ExitCode}. Por favor, use a opção 'Instalar Codec HEVC na Microsoft Store'.";
+                    TxtCodecInstallStatus.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtCodecInstallStatus.Text = $"Não foi possível iniciar o WinGet: {ex.Message}.\nPor favor, utilize a opção 'Instalar Codec HEVC na Microsoft Store'.";
+            TxtCodecInstallStatus.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68));
+        }
+        finally
+        {
+            BtnInstallCodecWinget.IsEnabled = true;
+            BtnInstallCodecWinget.Content = "⚡ Tentar Instalação Automática (via WinGet)";
+        }
+    }
+
+    private void BtnInstallCodecKLite_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://codecguide.com/download_k-lite_codec_pack_basic.htm",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Não foi possível abrir o navegador: {ex.Message}", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (CodecWarningOverlay.Visibility == Visibility.Visible && e.Key == System.Windows.Input.Key.Escape)
+        {
+            CodecWarningOverlay.Visibility = Visibility.Collapsed;
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == System.Windows.Input.Key.Right)
         {
             BtnNext_Click(this, new RoutedEventArgs());

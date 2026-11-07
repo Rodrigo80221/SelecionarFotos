@@ -7,8 +7,30 @@
   "targets": {
     ".NETCoreApp,Version=v10.0": {
       "VideoSelector/1.0.0": {
+        "dependencies": {
+          "LibVLCSharp.WPF": "3.10.2"
+        },
         "runtime": {
           "VideoSelector.dll": {}
+        }
+      },
+      "LibVLCSharp/3.10.2": {
+        "runtime": {
+          "lib/net10.0/LibVLCSharp.dll": {
+            "assemblyVersion": "3.10.2.0",
+            "fileVersion": "3.10.2.0"
+          }
+        }
+      },
+      "LibVLCSharp.WPF/3.10.2": {
+        "dependencies": {
+          "LibVLCSharp": "3.10.2"
+        },
+        "runtime": {
+          "lib/net6.0-windows7.0/LibVLCSharp.WPF.dll": {
+            "assemblyVersion": "3.10.2.0",
+            "fileVersion": "3.10.2.0"
+          }
         }
       }
     }
@@ -18,6 +40,20 @@
       "type": "project",
       "serviceable": false,
       "sha512": ""
+    },
+    "LibVLCSharp/3.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-WNLHBIK5QcOH0kNGBGupKC9Ds3hksPthHyp6ueE8zG5Hy/6EBwAU0BbMqukBCdLatCOY+V9DYHDwSVSXSmPGSA==",
+      "path": "libvlcsharp/3.10.2",
+      "hashPath": "libvlcsharp.3.10.2.nupkg.sha512"
+    },
+    "LibVLCSharp.WPF/3.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-jV7ThQIwaQxuLPLNWb1z7+qOGh6ctg/lBF5hVPfu+s+xI5HvtFEvCiYb8a88rEEd/g5WI/Llhy7ipeicAL5gsw==",
+      "path": "libvlcsharp.wpf/3.10.2",
+      "hashPath": "libvlcsharp.wpf.3.10.2.nupkg.sha512"
     }
   }
 }

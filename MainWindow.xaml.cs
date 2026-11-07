@@ -9,6 +9,8 @@ using System.Windows.Threading;
 using System.Windows.Controls.Primitives;
 using System;
 using System.Windows.Media;
+using System.Threading;
+using LibVLCSharp.Shared;
 
 namespace VideoSelector;
 
@@ -23,81 +25,124 @@ public partial class MainWindow : Window
     private double _currentSpeed = 1.0;
     private Stack<(string OriginalPath, string TargetPath, int Index)> _undoStack = new Stack<(string, string, int)>();
 
+    private LibVLC? _libVLC;
+    private LibVLCSharp.Shared.MediaPlayer? _mediaPlayer;
+    private Media? _currentMedia;
+
     public MainWindow()
     {
         InitializeComponent();
-        MediaPlayer.MediaEnded += (s, e) => 
-        {
-            MediaPlayer.Position = System.TimeSpan.Zero;
-            MediaPlayer.Play();
-        };
-        MediaPlayer.MediaOpened += MediaPlayer_MediaOpened;
-        MediaPlayer.MediaFailed += MediaPlayer_MediaFailed;
 
-        _timer = new DispatcherTimer();
-        _timer.Interval = TimeSpan.FromMilliseconds(200);
+        Core.Initialize();
+
+        // Initialize LibVLC with full hardware acceleration enabled (Direct3D 11 / DXVA2)
+        _libVLC = new LibVLC("--no-sub-autodetect-file", "--avcodec-hw=any");
+        _mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC);
+        VideoPlayer.MediaPlayer = _mediaPlayer;
+
+        _mediaPlayer.Playing += MediaPlayer_Playing;
+        _mediaPlayer.EndReached += MediaPlayer_EndReached;
+        _mediaPlayer.EncounteredError += MediaPlayer_EncounteredError;
+
+        _timer = new DispatcherTimer(DispatcherPriority.Background);
+        _timer.Interval = TimeSpan.FromMilliseconds(250);
         _timer.Tick += Timer_Tick;
+    }
+
+    private void MediaPlayer_EndReached(object? sender, EventArgs e)
+    {
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            if (_mediaPlayer != null)
+            {
+                _mediaPlayer.Stop();
+                _mediaPlayer.Play();
+            }
+        });
+    }
+
+    private void MediaPlayer_Playing(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _isPlaying = true;
+            BtnPlayPause.Content = "Pause";
+            _timer.Start();
+
+            long length = _mediaPlayer?.Length ?? 0;
+            if (length > 0)
+            {
+                TimelineSlider.Maximum = length / 1000.0;
+                UpdateVideoInfo(length);
+            }
+        });
+    }
+
+    private void MediaPlayer_EncounteredError(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _timer.Stop();
+            TimelineSlider.Maximum = 0;
+            TimelineSlider.Value = 0;
+            _isPlaying = false;
+            BtnPlayPause.Content = "Play";
+
+            string currentFile = (_currentIndex >= 0 && _currentIndex < _videoFiles.Count) ? _videoFiles[_currentIndex] : "";
+            string fileName = Path.GetFileName(currentFile);
+
+            TxtVideoInfo.Text = "Erro ao reproduzir mídia";
+            TxtCodecErrorDetails.Text = $"Arquivo: {fileName}\nFalha na decodificação do vídeo pelo LibVLC.";
+            
+            CodecWarningOverlay.Visibility = Visibility.Visible;
+        });
     }
 
     private void Timer_Tick(object? sender, EventArgs e)
     {
-        if (!_isDraggingSlider && MediaPlayer.Source != null && MediaPlayer.NaturalDuration.HasTimeSpan)
+        if (!_isDraggingSlider && _mediaPlayer != null && _isPlaying)
         {
-            _isUpdatingSlider = true;
-            TimelineSlider.Value = MediaPlayer.Position.TotalSeconds;
-            _isUpdatingSlider = false;
+            long length = _mediaPlayer.Length;
+            long time = _mediaPlayer.Time;
+
+            if (length > 0)
+            {
+                double totalSeconds = length / 1000.0;
+                double currentSeconds = time / 1000.0;
+
+                if (Math.Abs(TimelineSlider.Maximum - totalSeconds) > 0.5)
+                {
+                    TimelineSlider.Maximum = totalSeconds;
+                    UpdateVideoInfo(length);
+                }
+
+                _isUpdatingSlider = true;
+                TimelineSlider.Value = currentSeconds;
+                _isUpdatingSlider = false;
+            }
         }
     }
 
-    private void MediaPlayer_MediaOpened(object sender, RoutedEventArgs e)
+    private void UpdateVideoInfo(long lengthMs)
     {
-        CodecWarningOverlay.Visibility = Visibility.Collapsed;
-        MediaPlayer.SpeedRatio = _currentSpeed;
-        if (MediaPlayer.NaturalDuration.HasTimeSpan)
-        {
-            var duration = MediaPlayer.NaturalDuration.TimeSpan;
-            int width = MediaPlayer.NaturalVideoWidth;
-            int height = MediaPlayer.NaturalVideoHeight;
-            
-            string resString = $"{width}x{height}";
-            if ((width >= 3840 && height >= 2160) || (width >= 2160 && height >= 3840)) resString += " (4K)";
-            else if ((width >= 1920 && height >= 1080) || (width >= 1080 && height >= 1920)) resString += " (1080p)";
-            
-            TxtVideoInfo.Text = $"{duration:hh\\:mm\\:ss} | {resString}";
-            TimelineSlider.Maximum = duration.TotalSeconds;
-            _timer.Start();
-        }
-        else
-        {
-            TxtVideoInfo.Text = "Unknown duration/resolution";
-            TimelineSlider.Maximum = 0;
-            _timer.Stop();
-        }
-    }
+        uint width = 0;
+        uint height = 0;
+        _mediaPlayer?.Size(0, ref width, ref height);
 
-    private void MediaPlayer_MediaFailed(object? sender, ExceptionRoutedEventArgs e)
-    {
-        _timer.Stop();
-        TimelineSlider.Maximum = 0;
-        TimelineSlider.Value = 0;
-        _isPlaying = false;
-        BtnPlayPause.Content = "Play";
+        var duration = TimeSpan.FromMilliseconds(lengthMs);
+        string resString = $"{width}x{height}";
+        if ((width >= 3840 && height >= 2160) || (width >= 2160 && height >= 3840)) resString += " (4K)";
+        else if ((width >= 1920 && height >= 1080) || (width >= 1080 && height >= 1920)) resString += " (1080p)";
 
-        string currentFile = (_currentIndex >= 0 && _currentIndex < _videoFiles.Count) ? _videoFiles[_currentIndex] : "";
-        string fileName = Path.GetFileName(currentFile);
-
-        TxtVideoInfo.Text = "Formato ou Codec não suportado";
-        TxtCodecErrorDetails.Text = $"Arquivo: {fileName}\nFalha: {e.ErrorException?.Message ?? "Não foi possível reproduzir este vídeo. Provável ausência de codec HEVC (H.265)."}\nCódigo: 0x{e.ErrorException?.HResult:X8}";
-        
-        CodecWarningOverlay.Visibility = Visibility.Visible;
+        TxtVideoInfo.Text = $"{duration:hh\\:mm\\:ss} | {resString}";
     }
 
     private void SetSpeed(double speed, System.Windows.Controls.Button btn)
     {
         _currentSpeed = speed;
-        if (MediaPlayer != null)
+        if (_mediaPlayer != null)
         {
-            MediaPlayer.SpeedRatio = speed;
+            _mediaPlayer.SetRate((float)speed);
         }
         
         var normalBg = new SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51));
@@ -120,9 +165,11 @@ public partial class MainWindow : Window
 
     private void TimelineSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (!_isUpdatingSlider && !_isDraggingSlider && MediaPlayer.Source != null)
+        if (_isUpdatingSlider) return;
+
+        if (_isDraggingSlider && _mediaPlayer != null)
         {
-            MediaPlayer.Position = TimeSpan.FromSeconds(TimelineSlider.Value);
+            _mediaPlayer.Time = (long)(e.NewValue * 1000);
         }
     }
 
@@ -134,7 +181,10 @@ public partial class MainWindow : Window
     private void TimelineSlider_DragCompleted(object sender, DragCompletedEventArgs e)
     {
         _isDraggingSlider = false;
-        MediaPlayer.Position = TimeSpan.FromSeconds(TimelineSlider.Value);
+        if (_mediaPlayer != null)
+        {
+            _mediaPlayer.Time = (long)(TimelineSlider.Value * 1000);
+        }
     }
 
     private static readonly HashSet<string> SupportedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -188,8 +238,11 @@ public partial class MainWindow : Window
                 TxtCounter.Text = "";
                 _timer.Stop();
                 TimelineSlider.Value = 0;
-                MediaPlayer.Stop();
-                MediaPlayer.Source = null;
+                
+                _mediaPlayer?.Stop();
+                _currentMedia?.Dispose();
+                _currentMedia = null;
+
                 _videoFiles.Clear();
                 _undoStack.Clear();
                 BtnUndo.IsEnabled = false;
@@ -205,34 +258,42 @@ public partial class MainWindow : Window
 
     private void PlayCurrentVideo()
     {
-        if (_currentIndex >= 0 && _currentIndex < _videoFiles.Count)
+        if (_currentIndex >= 0 && _currentIndex < _videoFiles.Count && _libVLC != null && _mediaPlayer != null)
         {
             CodecWarningOverlay.Visibility = Visibility.Collapsed;
             TxtCodecInstallStatus.Visibility = Visibility.Collapsed;
+
             string file = _videoFiles[_currentIndex];
             TxtFileName.Text = Path.GetFileName(file);
             TxtCounter.Text = $"[{_currentIndex + 1}/{_videoFiles.Count}]";
             TxtVideoInfo.Text = "Loading info...";
-            MediaPlayer.Source = new System.Uri(file);
-            MediaPlayer.Play();
+
+            _currentMedia?.Dispose();
+            _currentMedia = new Media(_libVLC, file, FromType.FromPath);
+            _currentMedia.AddOption("input-repeat=65535");
+
+            _mediaPlayer.Play(_currentMedia);
+            _mediaPlayer.SetRate((float)_currentSpeed);
+
             _isPlaying = true;
             BtnPlayPause.Content = "Pause";
+            _timer.Start();
         }
     }
 
     private void BtnPlayPause_Click(object sender, RoutedEventArgs e)
     {
-        if (MediaPlayer.Source == null) return;
+        if (_mediaPlayer == null) return;
 
         if (_isPlaying)
         {
-            MediaPlayer.Pause();
+            _mediaPlayer.Pause();
             BtnPlayPause.Content = "Play";
             _isPlaying = false;
         }
         else
         {
-            MediaPlayer.Play();
+            _mediaPlayer.Play();
             BtnPlayPause.Content = "Pause";
             _isPlaying = true;
         }
@@ -273,8 +334,10 @@ public partial class MainWindow : Window
             CodecWarningOverlay.Visibility = Visibility.Collapsed;
             _timer.Stop();
             TimelineSlider.Value = 0;
-            MediaPlayer.Stop();
-            MediaPlayer.Source = null;
+
+            _mediaPlayer?.Stop();
+            _currentMedia?.Dispose();
+            _currentMedia = null;
 
             BtnReject.IsEnabled = false;
             BtnUndo.IsEnabled = false;
@@ -350,8 +413,10 @@ public partial class MainWindow : Window
             CodecWarningOverlay.Visibility = Visibility.Collapsed;
             _timer.Stop();
             TimelineSlider.Value = 0;
-            MediaPlayer.Stop();
-            MediaPlayer.Source = null;
+
+            _mediaPlayer?.Stop();
+            _currentMedia?.Dispose();
+            _currentMedia = null;
 
             BtnReject.IsEnabled = false;
             BtnUndo.IsEnabled = false;
@@ -408,7 +473,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            TxtCodecErrorDetails.Text = "Informativo: O Windows precisa do codec HEVC instalado para decodificar vídeos gravados no iPhone (.MOV / HEVC).";
+            TxtCodecErrorDetails.Text = "Informação: O reprodutor está utilizando o motor LibVLC com aceleração por hardware (GPU D3D11) para decodificação nativa de arquivos HEVC e HDR do iPhone (.MOV).";
             TxtCodecInstallStatus.Visibility = Visibility.Collapsed;
             CodecWarningOverlay.Visibility = Visibility.Visible;
         }
@@ -541,21 +606,23 @@ public partial class MainWindow : Window
         }
         else if (e.Key == System.Windows.Input.Key.Up)
         {
-            if (MediaPlayer.Source != null && MediaPlayer.NaturalDuration.HasTimeSpan)
+            if (_mediaPlayer != null)
             {
-                var newPos = MediaPlayer.Position.TotalSeconds + 5;
-                if (newPos > TimelineSlider.Maximum) newPos = TimelineSlider.Maximum;
-                MediaPlayer.Position = TimeSpan.FromSeconds(newPos);
+                long newTime = _mediaPlayer.Time + 5000;
+                if (newTime > _mediaPlayer.Length) newTime = _mediaPlayer.Length;
+                _mediaPlayer.Time = newTime;
+                TimelineSlider.Value = newTime / 1000.0;
             }
             e.Handled = true;
         }
         else if (e.Key == System.Windows.Input.Key.Down)
         {
-            if (MediaPlayer.Source != null)
+            if (_mediaPlayer != null)
             {
-                var newPos = MediaPlayer.Position.TotalSeconds - 5;
-                if (newPos < 0) newPos = 0;
-                MediaPlayer.Position = TimeSpan.FromSeconds(newPos);
+                long newTime = _mediaPlayer.Time - 5000;
+                if (newTime < 0) newTime = 0;
+                _mediaPlayer.Time = newTime;
+                TimelineSlider.Value = newTime / 1000.0;
             }
             e.Handled = true;
         }
@@ -610,5 +677,15 @@ public partial class MainWindow : Window
             SetSpeed(6.0, BtnSpeed6x);
             e.Handled = true;
         }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _timer.Stop();
+        _mediaPlayer?.Stop();
+        _mediaPlayer?.Dispose();
+        _currentMedia?.Dispose();
+        _libVLC?.Dispose();
+        base.OnClosed(e);
     }
 }
